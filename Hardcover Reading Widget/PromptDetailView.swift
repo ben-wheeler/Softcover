@@ -1,0 +1,253 @@
+import SwiftUI
+
+struct PromptDetailView: View {
+    let promptAnswer: PromptAnswer
+    @State private var answers: [UserPromptAnswer] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    
+    var body: some View {
+        Group {
+            if isLoading {
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Text("Loading answers...")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = errorMessage {
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 50))
+                        .foregroundColor(.orange)
+                    Text("Failed to load answers")
+                        .font(.headline)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Try Again") {
+                        Task { await loadAnswers() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Prompt header
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(promptAnswer.prompt.question ?? promptAnswer.prompt.slug.replacingOccurrences(of: "-", with: " ").capitalized)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            
+                            if let description = promptAnswer.prompt.description, !description.isEmpty {
+                                Text(description)
+                                    .font(.body)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top)
+                        
+                        Divider()
+                        
+                        // Answers
+                        if answers.isEmpty {
+                            VStack(spacing: 20) {
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.secondary)
+                                Text("No answers yet")
+                                    .font(.headline)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                        } else {
+                            LazyVStack(spacing: 16) {
+                                ForEach(answers) { answer in
+                                    PromptAnswerDetailCard(answer: answer)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Prompt Answers")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadAnswers()
+        }
+    }
+    
+    private func loadAnswers() async {
+        isLoading = true
+        errorMessage = nil
+        
+        let fetchedAnswers = await HardcoverService.fetchPromptAnswers(promptId: promptAnswer.prompt.id, userId: promptAnswer.userId)
+        
+        await MainActor.run {
+            self.answers = fetchedAnswers
+            self.isLoading = false
+        }
+    }
+}
+
+struct PromptAnswerDetailCard: View {
+    let answer: UserPromptAnswer
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // User info
+            HStack {
+                if let imageUrl = answer.user.image?.url, let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Circle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 40, height: 40)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 40, height: 40)
+                                .clipShape(Circle())
+                        case .failure:
+                            Circle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .foregroundColor(.gray)
+                                )
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                } else {
+                    Circle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .foregroundColor(.gray)
+                        )
+                }
+                
+                Text("@\(answer.user.username)")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Spacer()
+            }
+            
+            // Books
+            if !answer.books.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(answer.books) { book in
+                            NavigationLink(destination: BookDetailView(
+                                book: BookProgress(
+                                    id: "\(book.id)",
+                                    title: book.title,
+                                    author: "Unknown Author",
+                                    coverImageData: nil,
+                                    coverImageUrl: book.cachedImage?.url ?? book.image,
+                                    progress: 0.0,
+                                    totalPages: 0,
+                                    currentPage: 0,
+                                    bookId: book.id,
+                                    userBookId: nil,
+                                    editionId: nil,
+                                    originalTitle: book.title,
+                                    editionAverageRating: nil,
+                                    userRating: nil,
+                                    bookDescription: nil
+                                ),
+                                showFinishAction: false,
+                                allowStandaloneReviewButton: true,
+                                isOwnBook: false
+                            )) {
+                                VStack(alignment: .center, spacing: 8) {
+                                    if let imageUrl = book.cachedImage?.url ?? book.image,
+                                       let url = URL(string: imageUrl) {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .empty:
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.2))
+                                                    .frame(width: 80, height: 120)
+                                                    .overlay(ProgressView())
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                                    .frame(width: 80, height: 120)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            case .failure:
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.2))
+                                                    .frame(width: 80, height: 120)
+                                                    .overlay(
+                                                        Image(systemName: "book.fill")
+                                                            .foregroundColor(.gray)
+                                                    )
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            @unknown default:
+                                                EmptyView()
+                                            }
+                                        }
+                                    } else {
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 80, height: 120)
+                                            .overlay(
+                                                Image(systemName: "book.fill")
+                                                    .foregroundColor(.gray)
+                                            )
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    }
+                                    
+                                    Text(book.title)
+                                        .font(.caption)
+                                        .lineLimit(3)
+                                        .multilineTextAlignment(.center)
+                                        .frame(width: 80)
+                                        .foregroundColor(.primary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .frame(width: 80)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(UIColor.secondarySystemGroupedBackground))
+        .cornerRadius(12)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        PromptDetailView(promptAnswer: PromptAnswer(
+            id: 1,
+            createdAt: "2025-09-25T09:09:04.766927+00:00",
+            promptId: 1,
+            userId: 35696,
+            prompt: Prompt(
+                id: 1,
+                slug: "what-are-your-favorite-books-of-all-time",
+                question: "What are your favorite books of all time?",
+                description: "When you think back on every book you've ever read, what are some of your favorites?"
+            )
+        ))
+    }
+}

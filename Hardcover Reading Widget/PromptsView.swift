@@ -52,7 +52,12 @@ struct PromptsView: View {
                 ScrollView {
                     LazyVStack(spacing: 16) {
                         ForEach(prompts) { promptAnswer in
-                            PromptAnswerCard(promptAnswer: promptAnswer)
+                            NavigationLink {
+                                PromptDetailView(promptAnswer: promptAnswer)
+                            } label: {
+                                PromptAnswerCard(promptAnswer: promptAnswer)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding()
@@ -114,15 +119,41 @@ struct PromptAnswerCard: View {
                     .lineLimit(3)
             }
             
-            // Books
-            if !promptAnswer.books.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(promptAnswer.books.indices, id: \.self) { index in
-                            PromptBookCover(book: promptAnswer.books[index].book)
+            // Book Preview (first 3 books)
+            if let books = promptAnswer.previewBooks, !books.isEmpty {
+                HStack(spacing: -20) {
+                    ForEach(Array(books.enumerated()), id: \.element.id) { index, book in
+                        if let imageUrl = book.cachedImage?.url ?? book.image,
+                           let url = URL(string: imageUrl) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 60, height: 90)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(Color(UIColor.secondarySystemGroupedBackground), lineWidth: 2)
+                                        )
+                                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                                        .zIndex(Double(books.count - index))
+                                case .failure, .empty:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: 60, height: 90)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .zIndex(Double(books.count - index))
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
                         }
                     }
+                    Spacer()
                 }
+                .padding(.vertical, 4)
             }
             
             // Date
@@ -140,67 +171,6 @@ struct PromptAnswerCard: View {
         .padding()
         .background(Color(UIColor.secondarySystemGroupedBackground))
         .cornerRadius(12)
-    }
-}
-
-struct PromptBookCover: View {
-    let book: PromptBookDetails
-    
-    private var imageUrl: URL? {
-        if let cachedUrl = book.cachedImage?.url {
-            return URL(string: cachedUrl)
-        } else if let imageUrl = book.image {
-            return URL(string: imageUrl)
-        }
-        return nil
-    }
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            if let url = imageUrl {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 80, height: 120)
-                            .overlay(ProgressView())
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 80, height: 120)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    case .failure:
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 80, height: 120)
-                            .overlay(
-                                Image(systemName: "book.fill")
-                                    .foregroundColor(.gray)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    @unknown default:
-                        EmptyView()
-                    }
-                }
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 80, height: 120)
-                    .overlay(
-                        Image(systemName: "book.fill")
-                            .foregroundColor(.gray)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            
-            Text(book.title)
-                .font(.caption)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .frame(width: 80)
-        }
     }
 }
 
