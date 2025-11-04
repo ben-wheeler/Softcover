@@ -45,7 +45,7 @@ struct CachedImage: Codable {
 // MARK: - GraphQL Response
 struct GraphQLPromptsResponse: Codable {
     let data: PromptsData?
-    let errors: [GraphQLError]?
+    let errors: [GraphQLPromptError]?
 }
 
 struct PromptsData: Codable {
@@ -56,7 +56,7 @@ struct PromptsData: Codable {
     }
 }
 
-struct GraphQLError: Codable {
+struct GraphQLPromptError: Codable {
     let message: String
 }
 
