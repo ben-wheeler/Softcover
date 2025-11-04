@@ -405,7 +405,7 @@ struct BookReadStatusView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)
                     .font(.title2)
-                Text(NSLocalizedString("Läst", comment: "Book read status (headline, Swedish)"))
+                Text(NSLocalizedString("Read", comment: "Book read status"))
                     .font(.headline)
                     .foregroundColor(.green)
                 Spacer()
@@ -413,7 +413,7 @@ struct BookReadStatusView: View {
             
             if let finishedDate = finishedDate {
                 HStack {
-                    Text(NSLocalizedString("Avslutad:", comment: "Read date prefix (Swedish)"))
+                    Text(NSLocalizedString("Finished:", comment: "Read date prefix"))
                         .foregroundColor(.secondary)
                     Text(dateFormatter.string(from: finishedDate))
                         .fontWeight(.medium)
@@ -426,7 +426,7 @@ struct BookReadStatusView: View {
         .background(Color.green.opacity(0.1))
         .cornerRadius(12)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("Läst"))
+        .accessibilityLabel(Text(NSLocalizedString("Read", comment: "Book read status")))
         .accessibilityValue(Text(finishedDate != nil ? dateFormatter.string(from: finishedDate!) : ""))
     }
 }

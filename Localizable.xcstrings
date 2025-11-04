@@ -1499,7 +1499,7 @@
       "comment" : "Finished date"
     },
     "Finished:" : {
-      "extractionState" : "stale",
+      "comment" : "Read date prefix",
       "localizations" : {
         "sv" : {
           "stringUnit" : {
@@ -2962,7 +2962,7 @@
       }
     },
     "Read" : {
-      "comment" : "already read badge",
+      "comment" : "Book read status",
       "localizations" : {
         "sv" : {
           "stringUnit" : {
