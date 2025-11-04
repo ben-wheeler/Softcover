@@ -363,7 +363,7 @@ struct BookCardView: View {
         self.onProgressSaved = onProgressSaved
         self.onCelebrate = onCelebrate
         self.onFinished = onFinished
-        _editedPage = State(initialValue: book.currentPage)
+        _editedPage = State(initialValue: book.isAudiobook ? book.currentMinute : book.currentPage)
     }
     
     var body: some View {
@@ -405,26 +405,57 @@ struct BookCardView: View {
                     
                     Spacer()
                     
-                    if book.totalPages > 0 || book.currentPage > 0 {
+                    if book.isAudiobook ? (book.totalMinutes > 0 || book.currentMinute > 0) : (book.totalPages > 0 || book.currentPage > 0) {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 8) {
-                                // Left: page info
-                                if book.currentPage > 0 && book.totalPages > 0 {
-                                    Text("Page \(book.currentPage) of \(book.totalPages) pages")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else if book.currentPage > 0 {
-                                    Text("Page \(book.currentPage)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else if book.totalPages > 0 {
-                                    Text("\(book.totalPages) pages")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                // Left: progress info (pages or time)
+                                if book.isAudiobook {
+                                    if book.currentMinute > 0 && book.totalMinutes > 0 {
+                                        let currentHours = book.currentMinute / 60
+                                        let currentMins = book.currentMinute % 60
+                                        let totalHours = book.totalMinutes / 60
+                                        let totalMins = book.totalMinutes % 60
+                                        
+                                        if totalHours > 0 {
+                                            Text("\(currentHours)h \(currentMins)m of \(totalHours)h \(totalMins)m")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        } else {
+                                            Text("\(currentMins)m of \(totalMins)m")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    } else if book.totalMinutes > 0 {
+                                        let totalHours = book.totalMinutes / 60
+                                        let totalMins = book.totalMinutes % 60
+                                        if totalHours > 0 {
+                                            Text("\(totalHours)h \(totalMins)m")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        } else {
+                                            Text("\(totalMins)m")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
                                 } else {
-                                    Text("No progress information")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                    if book.currentPage > 0 && book.totalPages > 0 {
+                                        Text("Page \(book.currentPage) of \(book.totalPages) pages")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    } else if book.currentPage > 0 {
+                                        Text("Page \(book.currentPage)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    } else if book.totalPages > 0 {
+                                        Text("\(book.totalPages) pages")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("No progress information")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                                 
                                 Spacer()
@@ -517,10 +548,14 @@ struct BookCardView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             // Stepper with tappable label for manual input
                             HStack(spacing: 8) {
-                                Stepper(value: $editedPage, in: 0...(book.totalPages > 0 ? book.totalPages : max(editedPage, 0) + 10000)) {
+                                let maxValue = book.isAudiobook ? 
+                                    (book.totalMinutes > 0 ? book.totalMinutes : max(editedPage, 0) + 100000) :
+                                    (book.totalPages > 0 ? book.totalPages : max(editedPage, 0) + 10000)
+                                
+                                Stepper(value: $editedPage, in: 0...maxValue) {
                                     if isManualEditing {
                                         HStack(spacing: 6) {
-                                            TextField("Page", value: $editedPage, format: .number)
+                                            TextField(book.isAudiobook ? "Minutes" : "Page", value: $editedPage, format: .number)
                                                 .keyboardType(.numberPad)
                                                 .textFieldStyle(.roundedBorder)
                                                 .frame(minWidth: 70, maxWidth: 100)
@@ -539,9 +574,23 @@ struct BookCardView: View {
                                             isManualEditing = true
                                             pageFieldFocused = true
                                         } label: {
-                                            Text("Page \(editedPage)")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
+                                            if book.isAudiobook {
+                                                let hours = editedPage / 60
+                                                let mins = editedPage % 60
+                                                if hours > 0 {
+                                                    Text("\(hours)h \(mins)m")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                } else {
+                                                    Text("\(mins)m")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            } else {
+                                                Text("Page \(editedPage)")
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -550,9 +599,11 @@ struct BookCardView: View {
                                 if isUpdating {
                                     ProgressView().scaleEffect(0.8)
                                 } else {
+                                    let maxLimit = book.isAudiobook ? book.totalMinutes : book.totalPages
+                                    let currentValue = book.isAudiobook ? book.currentMinute : book.currentPage
                                     Button("Update") { Task { await updateProgress() } }
                                         .buttonStyle(.borderedProminent)
-                                        .disabled(editedPage < 0 || (book.totalPages > 0 && editedPage > book.totalPages) || editedPage == book.currentPage)
+                                        .disabled(editedPage < 0 || (maxLimit > 0 && editedPage > maxLimit) || editedPage == currentValue)
                                 }
                             }
                         }
@@ -651,9 +702,10 @@ struct BookCardView: View {
     
     private func updateProgress() async {
         guard let userBookId = book.userBookId else { return }
-        let increased = editedPage > book.currentPage
+        let currentValue = book.isAudiobook ? book.currentMinute : book.currentPage
+        let increased = editedPage > currentValue
         isUpdating = true
-        let success = await HardcoverService.updateProgress(userBookId: userBookId, editionId: book.editionId, page: editedPage)
+        let success = await HardcoverService.updateProgress(userBookId: userBookId, editionId: book.editionId, page: editedPage, isAudiobook: book.isAudiobook)
         await MainActor.run {
             isUpdating = false
             if success {

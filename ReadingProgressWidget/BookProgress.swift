@@ -22,5 +22,26 @@ struct BookProgress: Identifiable {
     var bookDescription: String? = nil
     // NEW: Release date for filtering upcoming/recent releases
     var releaseDate: String? = nil
+    // NEW: Audiobook support
+    var isAudiobook: Bool = false
+    var totalMinutes: Int = 0
+    var currentMinute: Int = 0
+    
+    var progressText: String {
+        if isAudiobook {
+            let currentHours = currentMinute / 60
+            let currentMins = currentMinute % 60
+            let totalHours = totalMinutes / 60
+            let totalMins = totalMinutes % 60
+            
+            if totalHours > 0 {
+                return "\(currentHours)h \(currentMins)m of \(totalHours)h \(totalMins)m"
+            } else {
+                return "\(currentMins)m of \(totalMins)m"
+            }
+        } else {
+            return "Page \(currentPage) of \(totalPages)"
+        }
+    }
 }
 

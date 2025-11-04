@@ -227,11 +227,12 @@ struct LargeBookProgressRow: View {
             }
 
             // Details
+            // Details
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline) {
+                HStack(alignment: .top, spacing: 4) {
                     Text(book.title)
-                        .font(.footnote.weight(.semibold))
-                        .lineLimit(1)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(2)
                     Spacer(minLength: 0)
                 }
                 Text(book.author)
@@ -241,15 +242,48 @@ struct LargeBookProgressRow: View {
 
                 if book.progress > 0 {
                     HStack {
-                        if book.currentPage > 0 {
-                            if book.totalPages > 0 {
-                                Text("Page \(book.currentPage) of \(book.totalPages)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            } else {
-                                Text("Page \(book.currentPage)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                        if book.isAudiobook {
+                            if book.currentMinute > 0 {
+                                let currentHours = book.currentMinute / 60
+                                let currentMins = book.currentMinute % 60
+                                let totalHours = book.totalMinutes / 60
+                                let totalMins = book.totalMinutes % 60
+                                
+                                if book.totalMinutes > 0 {
+                                    if totalHours > 0 {
+                                        Text("\(currentHours)h \(currentMins)m of \(totalHours)h \(totalMins)m")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("\(currentMins)m of \(totalMins)m")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                } else {
+                                    let hours = book.currentMinute / 60
+                                    let mins = book.currentMinute % 60
+                                    if hours > 0 {
+                                        Text("\(hours)h \(mins)m")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("\(mins)m")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                        } else {
+                            if book.currentPage > 0 {
+                                if book.totalPages > 0 {
+                                    Text("Page \(book.currentPage) of \(book.totalPages)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("Page \(book.currentPage)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                         Spacer()
@@ -319,15 +353,48 @@ struct MediumBookProgressRow: View {
 
                 if book.progress > 0 {
                     HStack {
-                        if book.currentPage > 0 {
-                            if book.totalPages > 0 {
-                                Text("Page \(book.currentPage) of \(book.totalPages)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            } else {
-                                Text("Page \(book.currentPage)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                        if book.isAudiobook {
+                            if book.currentMinute > 0 {
+                                let currentHours = book.currentMinute / 60
+                                let currentMins = book.currentMinute % 60
+                                let totalHours = book.totalMinutes / 60
+                                let totalMins = book.totalMinutes % 60
+                                
+                                if book.totalMinutes > 0 {
+                                    if totalHours > 0 {
+                                        Text("\(currentHours)h \(currentMins)m of \(totalHours)h \(totalMins)m")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("\(currentMins)m of \(totalMins)m")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                } else {
+                                    let hours = book.currentMinute / 60
+                                    let mins = book.currentMinute % 60
+                                    if hours > 0 {
+                                        Text("\(hours)h \(mins)m")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("\(mins)m")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                        } else {
+                            if book.currentPage > 0 {
+                                if book.totalPages > 0 {
+                                    Text("Page \(book.currentPage) of \(book.totalPages)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("Page \(book.currentPage)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                         Spacer()

@@ -89,6 +89,7 @@ struct UserBookRead: Codable {
     let startedAt: String?
     let finishedAt: String?
     let progressPages: Int?
+    let progressSeconds: Int?
     let editionId: Int?
     
     enum CodingKeys: String, CodingKey {
@@ -96,6 +97,7 @@ struct UserBookRead: Codable {
         case startedAt = "started_at"
         case finishedAt = "finished_at"
         case progressPages = "progress_pages"
+        case progressSeconds = "progress_seconds"
         case editionId = "edition_id"
     }
 }
@@ -129,7 +131,9 @@ struct Edition: Codable, Identifiable {
     let title: String?
     let isbn10: String?
     let isbn13: String?
+    let asin: String?
     let pages: Int?
+    let audioSeconds: Int?
     let publisher: Publisher?
     let image: EditionImage?
     let releaseDate: String? // release_date (date)
@@ -139,7 +143,9 @@ struct Edition: Codable, Identifiable {
         case title
         case isbn10 = "isbn_10"
         case isbn13 = "isbn_13"
+        case asin
         case pages
+        case audioSeconds = "audio_seconds"
         case publisher
         case image
         case releaseDate = "release_date"
@@ -149,12 +155,36 @@ struct Edition: Codable, Identifiable {
         return title ?? "Unknown Edition"
     }
     
+    var isAudiobook: Bool {
+        return audioSeconds != nil && audioSeconds! > 0
+    }
+    
+    var totalMinutes: Int {
+        guard let seconds = audioSeconds else { return 0 }
+        return seconds / 60
+    }
+    
+    var totalUnits: Int {
+        return isAudiobook ? totalMinutes : (pages ?? 0)
+    }
+    
     var displayInfo: String {
         var info: [String] = []
         if let pub = publisher?.name {
             info.append(pub)
         }
-        if let pageCount = pages {
+        if isAudiobook {
+            let minutes = totalMinutes
+            if minutes > 0 {
+                let hours = minutes / 60
+                let mins = minutes % 60
+                if hours > 0 {
+                    info.append("\(hours)h \(mins)m")
+                } else {
+                    info.append("\(mins)m")
+                }
+            }
+        } else if let pageCount = pages {
             info.append("\(pageCount) pages")
         }
         return info.joined(separator: " • ")
@@ -483,6 +513,7 @@ class HardcoverService {
             id
             title
             pages
+            audio_seconds
             image { url }
             release_date
           }
@@ -519,8 +550,11 @@ class HardcoverService {
               
               let coverData: Data? = (imageUrl != nil) ? await fetchAndResizeImage(from: imageUrl!) : nil
               
-              let totalPages = ub.edition?.pages ?? 0
-              let releaseDate = ub.edition?.releaseDate
+              let edition = ub.edition
+              let isAudiobook = edition?.isAudiobook ?? false
+              let totalPages = edition?.pages ?? 0
+              let totalMinutes = edition?.totalMinutes ?? 0
+              let releaseDate = edition?.releaseDate
               
               let item = BookProgress(
                   id: "\(ub.id ?? 0)",
@@ -534,7 +568,10 @@ class HardcoverService {
                   userBookId: ub.id,
                   editionId: ub.editionId,
                   originalTitle: bookData.title.decodedHTMLEntities,
-                  releaseDate: releaseDate
+                  releaseDate: releaseDate,
+                  isAudiobook: isAudiobook,
+                  totalMinutes: totalMinutes,
+                  currentMinute: 0
               )
               items.append(item)
           }
@@ -655,7 +692,7 @@ class HardcoverService {
       request.setValue(HardcoverConfig.headerValue(for: apiKey), forHTTPHeaderField: "Authorization")
       
       let booksQuery = """
-      { "query": "{ user_books(where: {user_id: {_eq: \(userId)}, status_id: {_eq: 2}}, order_by: {id: desc}, limit: 10) { id book_id status_id edition_id privacy_setting_id rating user_book_reads(order_by: {id: asc}) { id started_at finished_at progress_pages edition_id } book { id title contributions { author { name } } image { url } } edition { id title isbn_10 isbn_13 pages publisher { name } image { url } } } }" }
+      { "query": "{ user_books(where: {user_id: {_eq: \(userId)}, status_id: {_eq: 2}}, order_by: {id: desc}, limit: 10) { id book_id status_id edition_id privacy_setting_id rating user_book_reads(order_by: {id: asc}) { id started_at finished_at progress_pages progress_seconds edition_id } book { id title contributions { author { name } } image { url } } edition { id title isbn_10 isbn_13 pages audio_seconds publisher { name } image { url } } } }" }
       """
       request.httpBody = booksQuery.data(using: .utf8)
       
@@ -685,16 +722,33 @@ class HardcoverService {
               }
               let displayTitle = rawTitle.decodedHTMLEntities
               let author = bookData.contributions?.first?.author?.name ?? "Unknown Author"
-              let totalPages = userBook.edition?.pages ?? 0
+              
+              let edition = userBook.edition
+              let isAudiobook = edition?.isAudiobook ?? false
+              let totalPages = edition?.pages ?? 0
+              let totalMinutes = edition?.totalMinutes ?? 0
               
               var currentPage = 0
+              var currentMinute = 0
               var progress = 0.0
               if let userBookReads = userBook.userBookReads, !userBookReads.isEmpty,
-                 let latestRead = userBookReads.last,
-                 let progressPages = latestRead.progressPages {
-                  currentPage = progressPages
-                  if totalPages > 0 {
-                      progress = Double(progressPages) / Double(totalPages)
+                 let latestRead = userBookReads.last {
+                  if isAudiobook {
+                      // For audiobooks, use progress_seconds
+                      if let progressSeconds = latestRead.progressSeconds {
+                          currentMinute = progressSeconds / 60
+                          if totalMinutes > 0 {
+                              progress = Double(currentMinute) / Double(totalMinutes)
+                          }
+                      }
+                  } else {
+                      // For regular books, use progress_pages
+                      if let progressPages = latestRead.progressPages {
+                          currentPage = progressPages
+                          if totalPages > 0 {
+                              progress = Double(progressPages) / Double(totalPages)
+                          }
+                      }
                   }
               }
               
@@ -723,7 +777,10 @@ class HardcoverService {
                   bookId: bookData.id,
                   userBookId: userBook.id,
                   editionId: userBook.editionId,
-                  originalTitle: bookData.title.decodedHTMLEntities
+                  originalTitle: bookData.title.decodedHTMLEntities,
+                  isAudiobook: isAudiobook,
+                  totalMinutes: totalMinutes,
+                  currentMinute: currentMinute
               )
               
               books.append(book)
@@ -877,14 +934,14 @@ class HardcoverService {
       }
   }
   
-  static func insertBookRead(userBookId: Int, page: Int, editionId: Int? = nil) async -> Bool {
-      print("📝 Updating book read progress - UserBookId: \(userBookId), Page: \(page), EditionId: \(editionId ?? -1)")
+  static func insertBookRead(userBookId: Int, page: Int, editionId: Int? = nil, isAudiobook: Bool = false) async -> Bool {
+      print("📝 Updating book read progress - UserBookId: \(userBookId), \(isAudiobook ? "Seconds" : "Page"): \(page), EditionId: \(editionId ?? -1)")
       guard !HardcoverConfig.apiKey.isEmpty else { 
           print("❌ API key is empty")
           return false 
       }
       guard page >= 0 else { 
-          print("❌ Invalid page number: \(page)")
+          print("❌ Invalid \(isAudiobook ? "seconds" : "page") number: \(page)")
           return false 
       }
       
@@ -892,7 +949,7 @@ class HardcoverService {
       if let latestReadId = await fetchLatestReadId(userBookId: userBookId) {
           // Update the existing read
           print("📝 Updating existing read ID: \(latestReadId)")
-          let success = await updateExistingBookRead(readId: latestReadId, page: page, editionId: editionId)
+          let success = await updateExistingBookRead(readId: latestReadId, page: page, editionId: editionId, isAudiobook: isAudiobook)
           if success {
               print("✅ Successfully updated existing read")
               return true
@@ -904,7 +961,7 @@ class HardcoverService {
       
       // If update failed or no existing read, create new one
       print("📝 Creating new book read")
-      return await createNewBookRead(userBookId: userBookId, page: page, editionId: editionId)
+      return await createNewBookRead(userBookId: userBookId, page: page, editionId: editionId, isAudiobook: isAudiobook)
   }
   
   private static func fetchLatestReadId(userBookId: Int) async -> Int? {
@@ -953,14 +1010,19 @@ class HardcoverService {
       }
   }
   
-  private static func updateExistingBookRead(readId: Int, page: Int, editionId: Int?) async -> Bool {
+  private static func updateExistingBookRead(readId: Int, page: Int, editionId: Int?, isAudiobook: Bool = false) async -> Bool {
       guard let url = URL(string: "https://api.hardcover.app/v1/graphql") else { return false }
       var request = URLRequest(url: url)
       request.httpMethod = "POST"
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")
       request.setValue(HardcoverConfig.authorizationHeaderValue, forHTTPHeaderField: "Authorization")
       
-      var datesReadDict: [String: Any] = ["progress_pages": page]
+      var datesReadDict: [String: Any] = [:]
+      if isAudiobook {
+          datesReadDict["progress_seconds"] = page
+      } else {
+          datesReadDict["progress_pages"] = page
+      }
       if let eid = editionId {
           datesReadDict["edition_id"] = eid
       }
@@ -969,7 +1031,7 @@ class HardcoverService {
       mutation ($id: Int!, $object: DatesReadInput!) {
           update_user_book_read(id: $id, object: $object) {
               error
-              user_book_read { id progress_pages edition_id }
+              user_book_read { id progress_pages progress_seconds edition_id }
           }
       }
       """
@@ -1008,7 +1070,7 @@ class HardcoverService {
       }
   }
   
-  private static func createNewBookRead(userBookId: Int, page: Int, editionId: Int?) async -> Bool {
+  private static func createNewBookRead(userBookId: Int, page: Int, editionId: Int?, isAudiobook: Bool = false) async -> Bool {
       guard !HardcoverConfig.apiKey.isEmpty else { return false }
       guard page >= 0 else { return false }
       
@@ -1032,21 +1094,24 @@ class HardcoverService {
       df.dateFormat = "yyyy-MM-dd"
       let startedAt = df.string(from: Date())
       
+      let progressField = isAudiobook ? "progress_seconds" : "progress_pages"
+      let progressVar = isAudiobook ? "$seconds" : "$pages"
+      
       let mutation = """
-      mutation InsertUserBookRead($id: Int!, $pages: Int, $editionId: Int, $startedAt: date) {
+      mutation InsertUserBookRead($id: Int!, \(isAudiobook ? "$seconds" : "$pages"): Int, $editionId: Int, $startedAt: date) {
           insert_user_book_read(user_book_id: $id, user_book_read: {
-              progress_pages: $pages,
+              \(progressField): \(progressVar),
               edition_id: $editionId,
               started_at: $startedAt,
           }) {
               error
-              user_book_read { id progress_pages edition_id started_at finished_at }
+              user_book_read { id progress_pages progress_seconds edition_id started_at finished_at }
           }
       }
       """
       var variables: [String: Any] = [
           "id": userBookId,
-          "pages": page,
+          isAudiobook ? "seconds" : "pages": page,
           "startedAt": startedAt
       ]
       if let eid = targetEditionId { variables["editionId"] = eid }
@@ -1081,8 +1146,10 @@ class HardcoverService {
       }
   }
   
-  static func updateProgress(userBookId: Int, editionId: Int?, page: Int) async -> Bool {
-      return await insertBookRead(userBookId: userBookId, page: page, editionId: editionId)
+  static func updateProgress(userBookId: Int, editionId: Int?, page: Int, isAudiobook: Bool = false) async -> Bool {
+      // For audiobooks, 'page' is actually minutes, so convert to seconds
+      let progressValue = isAudiobook ? (page * 60) : page
+      return await insertBookRead(userBookId: userBookId, page: progressValue, editionId: editionId, isAudiobook: isAudiobook)
   }
   
   // MARK: - Search API
