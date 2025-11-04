@@ -114,6 +114,8 @@ struct PromptDetailView: View {
 
 struct PromptAnswerDetailCard: View {
     let answer: UserPromptAnswer
+    @State private var selectedBook: PromptBook? = nil
+    @State private var showDescription = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -166,29 +168,30 @@ struct PromptAnswerDetailCard: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 12) {
                         ForEach(answer.books) { book in
-                            NavigationLink(destination: BookDetailView(
-                                book: BookProgress(
-                                    id: "\(book.id)",
-                                    title: book.title,
-                                    author: "Unknown Author",
-                                    coverImageData: nil,
-                                    coverImageUrl: book.cachedImage?.url ?? book.image,
-                                    progress: 0.0,
-                                    totalPages: 0,
-                                    currentPage: 0,
-                                    bookId: book.id,
-                                    userBookId: nil,
-                                    editionId: nil,
-                                    originalTitle: book.title,
-                                    editionAverageRating: nil,
-                                    userRating: nil,
-                                    bookDescription: nil
-                                ),
-                                showFinishAction: false,
-                                allowStandaloneReviewButton: true,
-                                isOwnBook: false
-                            )) {
-                                VStack(alignment: .center, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                // Book cover - clickable to navigate to book detail
+                                NavigationLink(destination: BookDetailView(
+                                    book: BookProgress(
+                                        id: "\(book.id)",
+                                        title: book.title,
+                                        author: "Unknown Author",
+                                        coverImageData: nil,
+                                        coverImageUrl: book.cachedImage?.url ?? book.image,
+                                        progress: 0.0,
+                                        totalPages: 0,
+                                        currentPage: 0,
+                                        bookId: book.id,
+                                        userBookId: nil,
+                                        editionId: nil,
+                                        originalTitle: book.title,
+                                        editionAverageRating: nil,
+                                        userRating: nil,
+                                        bookDescription: nil
+                                    ),
+                                    showFinishAction: false,
+                                    allowStandaloneReviewButton: true,
+                                    isOwnBook: false
+                                )) {
                                     if let imageUrl = book.cachedImage?.url ?? book.image,
                                        let url = URL(string: imageUrl) {
                                         AsyncImage(url: url) { phase in
@@ -196,18 +199,18 @@ struct PromptAnswerDetailCard: View {
                                             case .empty:
                                                 Rectangle()
                                                     .fill(Color.gray.opacity(0.2))
-                                                    .frame(width: 80, height: 120)
+                                                    .frame(width: 120, height: 180)
                                                     .overlay(ProgressView())
                                             case .success(let image):
                                                 image
                                                     .resizable()
                                                     .aspectRatio(contentMode: .fill)
-                                                    .frame(width: 80, height: 120)
+                                                    .frame(width: 120, height: 180)
                                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                             case .failure:
                                                 Rectangle()
                                                     .fill(Color.gray.opacity(0.2))
-                                                    .frame(width: 80, height: 120)
+                                                    .frame(width: 120, height: 180)
                                                     .overlay(
                                                         Image(systemName: "book.fill")
                                                             .foregroundColor(.gray)
@@ -220,24 +223,45 @@ struct PromptAnswerDetailCard: View {
                                     } else {
                                         Rectangle()
                                             .fill(Color.gray.opacity(0.2))
-                                            .frame(width: 80, height: 120)
+                                            .frame(width: 120, height: 180)
                                             .overlay(
                                                 Image(systemName: "book.fill")
                                                     .foregroundColor(.gray)
                                             )
                                             .clipShape(RoundedRectangle(cornerRadius: 8))
                                     }
-                                    
-                                    Text(book.title)
-                                        .font(.caption)
-                                        .lineLimit(3)
-                                        .multilineTextAlignment(.center)
-                                        .frame(width: 80)
-                                        .foregroundColor(.primary)
-                                        .fixedSize(horizontal: false, vertical: true)
                                 }
-                                .frame(width: 80)
+                                
+                                Text(book.title)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .lineLimit(2)
+                                    .frame(width: 120)
+                                    .foregroundColor(.primary)
+                                
+                                // Show description preview and info button
+                                if let description = book.description, !description.isEmpty {
+                                    HStack(alignment: .top, spacing: 4) {
+                                        Text(description)
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(3)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        
+                                        Button(action: {
+                                            selectedBook = book
+                                            showDescription = true
+                                        }) {
+                                            Image(systemName: "info.circle")
+                                                .font(.caption)
+                                                .foregroundColor(.blue)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    .frame(width: 120)
+                                }
                             }
+                            .frame(width: 120)
                         }
                     }
                 }
@@ -246,6 +270,89 @@ struct PromptAnswerDetailCard: View {
         .padding()
         .background(Color(UIColor.secondarySystemGroupedBackground))
         .cornerRadius(12)
+        .sheet(isPresented: $showDescription) {
+            if let book = selectedBook {
+                BookDescriptionSheet(book: book)
+            }
+        }
+    }
+}
+
+// New view for showing full description
+struct BookDescriptionSheet: View {
+    let book: PromptBook
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Book cover and title
+                    HStack(alignment: .top, spacing: 16) {
+                        if let imageUrl = book.cachedImage?.url ?? book.image,
+                           let url = URL(string: imageUrl) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 80, height: 120)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: 80, height: 120)
+                                        .overlay(ProgressView())
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: 80, height: 120)
+                                        .overlay(
+                                            Image(systemName: "book.fill")
+                                                .foregroundColor(.gray)
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(book.title)
+                                .font(.headline)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    // Full description
+                    if let description = book.description {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Why this book?")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            
+                            Text(description)
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Book Answer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 

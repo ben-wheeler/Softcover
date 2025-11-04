@@ -71,9 +71,10 @@ struct PromptBook: Codable, Identifiable, Equatable {
     let title: String
     let image: String?
     let cachedImage: CachedPromptImage?
+    let description: String? // User's answer for why they chose this book
     
     enum CodingKeys: String, CodingKey {
-        case id, title, image
+        case id, title, image, description
         case cachedImage = "cached_image"
     }
     
@@ -535,7 +536,10 @@ extension HardcoverService {
                 let cachedImageUrl = (bookDict["cached_image"] as? [String: Any])?["url"] as? String
                 let cachedImage = cachedImageUrl != nil ? CachedPromptImage(url: cachedImageUrl) : nil
                 
-                books.append(PromptBook(id: id, title: title, image: imageUrl, cachedImage: cachedImage))
+                // Get the user's description/answer for this book
+                let description = promptBook["description"] as? String
+                
+                books.append(PromptBook(id: id, title: title, image: imageUrl, cachedImage: cachedImage, description: description))
             }
             
             // Create a single answer with the user and their books
