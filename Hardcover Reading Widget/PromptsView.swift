@@ -1,9 +1,14 @@
 import SwiftUI
 
 struct PromptsView: View {
+    let username: String? // nil means current user
     @State private var prompts: [PromptAnswer] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    
+    init(username: String? = nil) {
+        self.username = username
+    }
     
     var body: some View {
         Group {
@@ -75,7 +80,12 @@ struct PromptsView: View {
         isLoading = true
         errorMessage = nil
         
-        let fetchedPrompts = await HardcoverService.fetchAnsweredPrompts()
+        let fetchedPrompts: [PromptAnswer]
+        if let username = username {
+            fetchedPrompts = await HardcoverService.fetchAnsweredPrompts(forUsername: username)
+        } else {
+            fetchedPrompts = await HardcoverService.fetchAnsweredPrompts()
+        }
         
         await MainActor.run {
             if fetchedPrompts.isEmpty && errorMessage == nil {

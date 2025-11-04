@@ -89,7 +89,21 @@ struct PromptDetailView: View {
         isLoading = true
         errorMessage = nil
         
-        let fetchedAnswers = await HardcoverService.fetchPromptAnswers(promptId: promptAnswer.prompt.id, userId: promptAnswer.userId)
+        // Get username for this userId
+        guard let username = await HardcoverService.fetchUsername(forUserId: promptAnswer.userId) else {
+            await MainActor.run {
+                self.errorMessage = "Could not fetch username"
+                self.isLoading = false
+            }
+            return
+        }
+        
+        let fetchedAnswers = await HardcoverService.fetchPromptAnswers(
+            promptId: promptAnswer.prompt.id,
+            userId: promptAnswer.userId,
+            username: username,
+            slug: promptAnswer.prompt.slug
+        )
         
         await MainActor.run {
             self.answers = fetchedAnswers

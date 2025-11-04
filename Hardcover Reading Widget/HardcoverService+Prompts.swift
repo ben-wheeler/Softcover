@@ -81,14 +81,124 @@ struct CachedPromptImage: Codable {
 extension HardcoverService {
     /// Fetch answered prompts for the current user
     static func fetchAnsweredPrompts() async -> [PromptAnswer] {
+        guard let profile = await fetchUserProfile() else {
+            print("❌ Could not fetch user profile")
+            return []
+        }
+        return await fetchAnsweredPrompts(forUserId: profile.id)
+    }
+    
+    /// Fetch answered prompts for a specific user by username
+    static func fetchAnsweredPrompts(forUsername username: String) async -> [PromptAnswer] {
         guard !HardcoverConfig.apiKey.isEmpty else {
             print("❌ No API key available")
             return []
         }
         
-        // First get user ID
-        guard let profile = await fetchUserProfile() else {
-            print("❌ Could not fetch user profile")
+        guard let url = URL(string: "https://api.hardcover.app/v1/graphql") else {
+            print("❌ Invalid API URL")
+            return []
+        }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(HardcoverConfig.authorizationHeaderValue, forHTTPHeaderField: "Authorization")
+        
+        // Query prompt_answers with nested user.username filter
+        let query = """
+        query {
+          prompt_answers(
+            where: {user: {username: {_eq: "\(username)"}}}, 
+            order_by: {created_at: desc}
+          ) {
+            id
+            created_at
+            prompt_id
+            user_id
+            prompt {
+              id
+              slug
+              question
+              description
+            }
+          }
+        }
+        """
+        
+        let body: [String: Any] = ["query": query]
+        
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {
+            print("❌ Failed to serialize request body")
+            return []
+        }
+        
+        req.httpBody = httpBody
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("📥 Prompts HTTP Status: \(httpResponse.statusCode)")
+            }
+            
+            if let raw = String(data: data, encoding: .utf8) {
+                print("📥 Prompts Response (first 500 chars): \(raw.prefix(500))")
+            }
+            
+            // Parse the response
+            let decoder = JSONDecoder()
+            
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let dataDict = json["data"] as? [String: Any],
+               let promptAnswers = dataDict["prompt_answers"] as? [[String: Any]] {
+                
+                // Convert back to data and decode
+                let answersData = try JSONSerialization.data(withJSONObject: promptAnswers)
+                var answers = try decoder.decode([PromptAnswer].self, from: answersData)
+                
+                // Remove duplicates based on promptId
+                var uniqueAnswers: [PromptAnswer] = []
+                var seenPromptIds = Set<Int>()
+                
+                for answer in answers {
+                    if !seenPromptIds.contains(answer.promptId) {
+                        uniqueAnswers.append(answer)
+                        seenPromptIds.insert(answer.promptId)
+                    }
+                }
+                
+                print("✅ Fetched \(uniqueAnswers.count) unique prompt answers for @\(username)")
+                
+                // Fetch preview books for each prompt
+                for i in 0..<uniqueAnswers.count {
+                    let userAnswers = await fetchPromptAnswers(
+                        promptId: uniqueAnswers[i].promptId,
+                        userId: uniqueAnswers[i].userId,
+                        username: username,
+                        slug: uniqueAnswers[i].prompt.slug
+                    )
+                    if let firstAnswer = userAnswers.first {
+                        uniqueAnswers[i].previewBooks = firstAnswer.books
+                    }
+                }
+                
+                return uniqueAnswers
+            } else {
+                print("❌ Could not parse GraphQL response")
+                return []
+            }
+            
+        } catch {
+            print("❌ Error fetching prompts: \(error)")
+            return []
+        }
+    }
+    
+    /// Fetch answered prompts for a specific user ID (old GraphQL method, kept for current user)
+    private static func fetchAnsweredPrompts(forUserId userId: Int) async -> [PromptAnswer] {
+        guard !HardcoverConfig.apiKey.isEmpty else {
+            print("❌ No API key available")
             return []
         }
         
@@ -104,7 +214,7 @@ extension HardcoverService {
         
         let query = """
         query {
-          prompt_answers(where: {user_id: {_eq: \(profile.id)}}, order_by: {created_at: desc}) {
+          prompt_answers(where: {user_id: {_eq: \(userId)}}, order_by: {created_at: desc}) {
             id
             created_at
             prompt_id
@@ -163,7 +273,16 @@ extension HardcoverService {
                 
                 // Fetch preview books for each prompt (first 3 books)
                 for i in 0..<uniqueAnswers.count {
-                    let userAnswers = await fetchPromptAnswers(promptId: uniqueAnswers[i].promptId, userId: uniqueAnswers[i].userId)
+                    // Get username for this userId
+                    guard let username = await fetchUsername(forUserId: uniqueAnswers[i].userId) else {
+                        continue
+                    }
+                    let userAnswers = await fetchPromptAnswers(
+                        promptId: uniqueAnswers[i].promptId,
+                        userId: uniqueAnswers[i].userId,
+                        username: username,
+                        slug: uniqueAnswers[i].prompt.slug
+                    )
                     if let firstAnswer = userAnswers.first {
                         uniqueAnswers[i].previewBooks = firstAnswer.books
                     }
@@ -182,30 +301,58 @@ extension HardcoverService {
         }
     }
     
+    /// Fetch username for a given user ID
+    static func fetchUsername(forUserId userId: Int) async -> String? {
+        guard let url = URL(string: "https://api.hardcover.app/v1/graphql") else {
+            return nil
+        }
+        
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(HardcoverConfig.authorizationHeaderValue, forHTTPHeaderField: "Authorization")
+        
+        let query = """
+        query {
+          users(where: {id: {_eq: \(userId)}}, limit: 1) {
+            username
+          }
+        }
+        """
+        
+        let body: [String: Any] = ["query": query]
+        
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {
+            return nil
+        }
+        
+        req.httpBody = httpBody
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(for: req)
+            
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let dataDict = json["data"] as? [String: Any],
+               let users = dataDict["users"] as? [[String: Any]],
+               let firstUser = users.first,
+               let username = firstUser["username"] as? String {
+                return username
+            }
+        } catch {
+            print("❌ Error fetching username: \(error)")
+        }
+        
+        return nil
+    }
+    
     /// Fetch a specific user's answer for a specific prompt
-    static func fetchPromptAnswers(promptId: Int, userId: Int) async -> [UserPromptAnswer] {
+    static func fetchPromptAnswers(promptId: Int, userId: Int, username: String, slug: String) async -> [UserPromptAnswer] {
         guard !HardcoverConfig.apiKey.isEmpty else {
             print("❌ No API key available")
             return []
         }
         
-        // Get username from profile
-        guard let profile = await fetchUserProfile() else {
-            print("❌ Could not fetch user profile")
-            return []
-        }
-        
-        // For now, use a simple mapping. In production, we should cache the slug from fetchAnsweredPrompts
-        let promptSlugMap: [Int: String] = [
-            1: "what-are-your-favorite-books-of-all-time"
-        ]
-        
-        guard let slug = promptSlugMap[promptId] else {
-            print("❌ Unknown prompt ID: \(promptId)")
-            return []
-        }
-        
-        guard let url = URL(string: "https://hardcover.app/@\(profile.username)/prompts/\(slug)") else {
+        guard let url = URL(string: "https://hardcover.app/@\(username)/prompts/\(slug)") else {
             print("❌ Invalid URL")
             return []
         }
@@ -332,7 +479,13 @@ extension HardcoverService {
             }
             
             // Create a single answer with the user and their books
-            let user = PromptUser(username: profile.username, image: profile.image != nil ? UserImage(url: profile.image?.url) : nil)
+            // Fetch user image from profile
+            var userImage: UserImage? = nil
+            if let userProfile = await fetchUserProfile(username: username) {
+                userImage = userProfile.image != nil ? UserImage(url: userProfile.image?.url) : nil
+            }
+            
+            let user = PromptUser(username: username, image: userImage)
             let answer = UserPromptAnswer(id: promptId, user: user, books: books)
             
             print("✅ Fetched \(books.count) books from HTML")

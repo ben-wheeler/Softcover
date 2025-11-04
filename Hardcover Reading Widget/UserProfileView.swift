@@ -209,6 +209,31 @@ struct UserProfileView: View {
                             .padding(.leading, 46)
                             .background(Color(UIColor.secondarySystemGroupedBackground))
                         
+                        // Answered Prompts
+                        NavigationLink {
+                            PromptsView(username: profile.username)
+                        } label: {
+                            HStack {
+                                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                                    .foregroundColor(.pink)
+                                    .frame(width: 30)
+                                Text("Answered Prompts")
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 16)
+                            .padding(.horizontal)
+                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                        }
+                        
+                        Divider()
+                            .padding(.leading, 46)
+                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                        
                         // Friends
                         NavigationLink {
                             OtherUserFriendsView(username: profile.username)
