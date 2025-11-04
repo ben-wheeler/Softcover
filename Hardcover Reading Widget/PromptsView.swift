@@ -79,19 +79,38 @@ struct PromptsView: View {
     private func loadPrompts() async {
         isLoading = true
         errorMessage = nil
+        prompts = [] // Clear existing prompts
         
         let fetchedPrompts: [PromptAnswer]
         if let username = username {
-            fetchedPrompts = await HardcoverService.fetchAnsweredPrompts(forUsername: username)
+            // Fetch with progressive loading
+            fetchedPrompts = await HardcoverService.fetchAnsweredPrompts(forUsername: username) { promptAnswer in
+                // Add or update prompt as it loads
+                if let index = self.prompts.firstIndex(where: { $0.id == promptAnswer.id }) {
+                    // Update existing prompt (e.g., with preview books)
+                    self.prompts[index] = promptAnswer
+                } else {
+                    // Add new prompt
+                    self.prompts.append(promptAnswer)
+                }
+            }
         } else {
-            fetchedPrompts = await HardcoverService.fetchAnsweredPrompts()
+            // Fetch with progressive loading
+            fetchedPrompts = await HardcoverService.fetchAnsweredPrompts { promptAnswer in
+                // Add or update prompt as it loads
+                if let index = self.prompts.firstIndex(where: { $0.id == promptAnswer.id }) {
+                    // Update existing prompt (e.g., with preview books)
+                    self.prompts[index] = promptAnswer
+                } else {
+                    // Add new prompt
+                    self.prompts.append(promptAnswer)
+                }
+            }
         }
         
         await MainActor.run {
-            if fetchedPrompts.isEmpty && errorMessage == nil {
-                // Could be legitimately empty or an error
-                self.prompts = []
-            } else {
+            // Final update in case callback didn't catch everything
+            if self.prompts.isEmpty && !fetchedPrompts.isEmpty {
                 self.prompts = fetchedPrompts
             }
             self.isLoading = false

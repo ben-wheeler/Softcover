@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - Prompt Models
-struct PromptAnswer: Codable, Identifiable {
+struct PromptAnswer: Codable, Identifiable, Equatable {
     let id: Int
     let createdAt: String
     let promptId: Int
@@ -16,9 +16,13 @@ struct PromptAnswer: Codable, Identifiable {
         case userId = "user_id"
         case prompt
     }
+    
+    static func == (lhs: PromptAnswer, rhs: PromptAnswer) -> Bool {
+        return lhs.id == rhs.id
+    }
 }
 
-struct Prompt: Codable {
+struct Prompt: Codable, Equatable {
     let id: Int
     let slug: String
     let question: String?
@@ -53,16 +57,16 @@ struct UserPromptAnswer: Identifiable {
     let books: [PromptBook]
 }
 
-struct PromptUser: Codable {
+struct PromptUser: Codable, Equatable {
     let username: String
     let image: UserImage?
 }
 
-struct UserImage: Codable {
+struct UserImage: Codable, Equatable {
     let url: String?
 }
 
-struct PromptBook: Codable, Identifiable {
+struct PromptBook: Codable, Identifiable, Equatable {
     let id: Int
     let title: String
     let image: String?
@@ -72,24 +76,37 @@ struct PromptBook: Codable, Identifiable {
         case id, title, image
         case cachedImage = "cached_image"
     }
+    
+    static func == (lhs: PromptBook, rhs: PromptBook) -> Bool {
+        return lhs.id == rhs.id
+    }
 }
 
-struct CachedPromptImage: Codable {
+struct CachedPromptImage: Codable, Equatable {
     let url: String?
 }
 
 extension HardcoverService {
-    /// Fetch answered prompts for the current user
+    /// Fetch answered prompts for the current user with progressive loading
+    static func fetchAnsweredPrompts(onPromptLoaded: @escaping (PromptAnswer) -> Void) async -> [PromptAnswer] {
+        guard let profile = await fetchUserProfile() else {
+            print("❌ Could not fetch user profile")
+            return []
+        }
+        return await fetchAnsweredPrompts(forUserId: profile.id, onPromptLoaded: onPromptLoaded)
+    }
+    
+    /// Fetch answered prompts for the current user (without progressive loading)
     static func fetchAnsweredPrompts() async -> [PromptAnswer] {
         guard let profile = await fetchUserProfile() else {
             print("❌ Could not fetch user profile")
             return []
         }
-        return await fetchAnsweredPrompts(forUserId: profile.id)
+        return await fetchAnsweredPrompts(forUserId: profile.id, onPromptLoaded: { _ in })
     }
     
-    /// Fetch answered prompts for a specific user by username
-    static func fetchAnsweredPrompts(forUsername username: String) async -> [PromptAnswer] {
+    /// Fetch answered prompts for a specific user by username with progressive loading
+    static func fetchAnsweredPrompts(forUsername username: String, onPromptLoaded: @escaping (PromptAnswer) -> Void) async -> [PromptAnswer] {
         guard !HardcoverConfig.apiKey.isEmpty else {
             print("❌ No API key available")
             return []
@@ -170,16 +187,34 @@ extension HardcoverService {
                 
                 print("✅ Fetched \(uniqueAnswers.count) unique prompt answers for @\(username)")
                 
-                // Fetch preview books for each prompt
-                for i in 0..<uniqueAnswers.count {
-                    let userAnswers = await fetchPromptAnswers(
-                        promptId: uniqueAnswers[i].promptId,
-                        userId: uniqueAnswers[i].userId,
-                        username: username,
-                        slug: uniqueAnswers[i].prompt.slug
-                    )
-                    if let firstAnswer = userAnswers.first {
-                        uniqueAnswers[i].previewBooks = firstAnswer.books
+                // Return prompts immediately without preview books
+                for answer in uniqueAnswers {
+                    await MainActor.run {
+                        onPromptLoaded(answer)
+                    }
+                }
+                
+                // Fetch preview books for each prompt asynchronously
+                await withTaskGroup(of: (Int, [PromptBook]?).self) { group in
+                    for (index, answer) in uniqueAnswers.enumerated() {
+                        group.addTask {
+                            let userAnswers = await fetchPromptAnswers(
+                                promptId: answer.promptId,
+                                userId: answer.userId,
+                                username: username,
+                                slug: answer.prompt.slug
+                            )
+                            return (index, userAnswers.first?.books)
+                        }
+                    }
+                    
+                    for await (index, books) in group {
+                        if let books = books {
+                            uniqueAnswers[index].previewBooks = books
+                            await MainActor.run {
+                                onPromptLoaded(uniqueAnswers[index])
+                            }
+                        }
                     }
                 }
                 
@@ -195,8 +230,13 @@ extension HardcoverService {
         }
     }
     
+    /// Fetch answered prompts for a specific user by username (without progressive loading)
+    static func fetchAnsweredPrompts(forUsername username: String) async -> [PromptAnswer] {
+        return await fetchAnsweredPrompts(forUsername: username, onPromptLoaded: { _ in })
+    }
+    
     /// Fetch answered prompts for a specific user ID (old GraphQL method, kept for current user)
-    private static func fetchAnsweredPrompts(forUserId userId: Int) async -> [PromptAnswer] {
+    private static func fetchAnsweredPrompts(forUserId userId: Int, onPromptLoaded: @escaping (PromptAnswer) -> Void) async -> [PromptAnswer] {
         guard !HardcoverConfig.apiKey.isEmpty else {
             print("❌ No API key available")
             return []
@@ -271,20 +311,40 @@ extension HardcoverService {
                     }
                 }
                 
-                // Fetch preview books for each prompt (first 3 books)
-                for i in 0..<uniqueAnswers.count {
-                    // Get username for this userId
-                    guard let username = await fetchUsername(forUserId: uniqueAnswers[i].userId) else {
-                        continue
+                // Return prompts immediately without preview books
+                for answer in uniqueAnswers {
+                    await MainActor.run {
+                        onPromptLoaded(answer)
                     }
-                    let userAnswers = await fetchPromptAnswers(
-                        promptId: uniqueAnswers[i].promptId,
-                        userId: uniqueAnswers[i].userId,
-                        username: username,
-                        slug: uniqueAnswers[i].prompt.slug
-                    )
-                    if let firstAnswer = userAnswers.first {
-                        uniqueAnswers[i].previewBooks = firstAnswer.books
+                }
+                
+                // Get username for loading books
+                guard let username = await fetchUsername(forUserId: userId) else {
+                    print("✅ Fetched \(uniqueAnswers.count) unique prompt answers (from \(answers.count) total rows) - no username for books")
+                    return uniqueAnswers
+                }
+                
+                // Fetch preview books for each prompt asynchronously
+                await withTaskGroup(of: (Int, [PromptBook]?).self) { group in
+                    for (index, answer) in uniqueAnswers.enumerated() {
+                        group.addTask {
+                            let userAnswers = await fetchPromptAnswers(
+                                promptId: answer.promptId,
+                                userId: answer.userId,
+                                username: username,
+                                slug: answer.prompt.slug
+                            )
+                            return (index, userAnswers.first?.books)
+                        }
+                    }
+                    
+                    for await (index, books) in group {
+                        if let books = books {
+                            uniqueAnswers[index].previewBooks = books
+                            await MainActor.run {
+                                onPromptLoaded(uniqueAnswers[index])
+                            }
+                        }
                     }
                 }
                 
