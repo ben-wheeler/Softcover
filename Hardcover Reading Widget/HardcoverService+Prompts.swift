@@ -18,7 +18,7 @@ struct PromptAnswer: Codable, Identifiable {
 struct Prompt: Codable {
     let id: Int
     let slug: String
-    let title: String
+    let title: String?
     let description: String?
 }
 
@@ -87,8 +87,6 @@ extension HardcoverService {
               prompt {
                 id
                 slug
-                title
-                description
               }
               prompt_answer_books {
                 book {

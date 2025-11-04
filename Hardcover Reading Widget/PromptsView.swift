@@ -101,8 +101,8 @@ struct PromptAnswerCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Prompt Title
-            Text(promptAnswer.prompt.title)
+            // Prompt Title - use slug as fallback if title not available
+            Text(promptAnswer.prompt.title ?? promptAnswer.prompt.slug.replacingOccurrences(of: "-", with: " ").capitalized)
                 .font(.headline)
                 .foregroundColor(.primary)
             
