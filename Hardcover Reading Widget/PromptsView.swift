@@ -102,12 +102,12 @@ struct PromptAnswerCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Prompt Title - use question if available, otherwise slug
-            Text(promptAnswer.data.prompt.question ?? promptAnswer.data.prompt.slug.replacingOccurrences(of: "-", with: " ").capitalized)
+            Text(promptAnswer.prompt.question ?? promptAnswer.prompt.slug.replacingOccurrences(of: "-", with: " ").capitalized)
                 .font(.headline)
                 .foregroundColor(.primary)
             
             // Prompt Description
-            if let description = promptAnswer.data.prompt.description, !description.isEmpty {
+            if let description = promptAnswer.prompt.description, !description.isEmpty {
                 Text(description)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -115,11 +115,11 @@ struct PromptAnswerCard: View {
             }
             
             // Books
-            if let answers = promptAnswer.data.prompt.answers, !answers.isEmpty {
+            if !promptAnswer.books.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
-                        ForEach(answers.indices, id: \.self) { index in
-                            PromptBookCover(book: answers[index].book)
+                        ForEach(promptAnswer.books.indices, id: \.self) { index in
+                            PromptBookCover(book: promptAnswer.books[index].book)
                         }
                     }
                 }

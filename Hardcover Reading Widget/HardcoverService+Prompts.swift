@@ -4,19 +4,15 @@ import Foundation
 struct PromptAnswer: Codable, Identifiable {
     let id: Int
     let createdAt: String
-    let data: PromptActivityData
-    let bookId: Int?
+    let prompt: Prompt
+    let books: [PromptAnswerBook]
     
     enum CodingKeys: String, CodingKey {
         case id
         case createdAt = "created_at"
-        case data
-        case bookId = "book_id"
+        case prompt
+        case books = "prompt_answer_books"
     }
-}
-
-struct PromptActivityData: Codable {
-    let prompt: Prompt
 }
 
 struct Prompt: Codable {
@@ -24,7 +20,6 @@ struct Prompt: Codable {
     let slug: String
     let question: String?
     let description: String?
-    let answers: [PromptAnswerBook]?
 }
 
 struct PromptAnswerBook: Codable {
@@ -73,11 +68,25 @@ extension HardcoverService {
         
         let query = """
         query {
-          activities(where: {user_id: {_eq: \(profile.id)}, event: {_eq: "PromptActivity"}}, order_by: {created_at: desc}, limit: 50) {
+          prompt_answers(where: {user_id: {_eq: \(profile.id)}}, order_by: {created_at: desc}) {
             id
             created_at
-            book_id
-            data
+            prompt {
+              id
+              slug
+              question
+              description
+            }
+            prompt_answer_books(order_by: {position: asc}) {
+              book {
+                id
+                title
+                image
+                cached_image {
+                  url
+                }
+              }
+            }
           }
         }
         """
@@ -107,16 +116,16 @@ extension HardcoverService {
             
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let dataDict = json["data"] as? [String: Any],
-               let activities = dataDict["activities"] as? [[String: Any]] {
+               let promptAnswers = dataDict["prompt_answers"] as? [[String: Any]] {
                 
                 // Convert back to data and decode
-                let activitiesData = try JSONSerialization.data(withJSONObject: activities)
-                let answers = try decoder.decode([PromptAnswer].self, from: activitiesData)
-                print("✅ Fetched \(answers.count) prompt activities")
+                let answersData = try JSONSerialization.data(withJSONObject: promptAnswers)
+                let answers = try decoder.decode([PromptAnswer].self, from: answersData)
+                print("✅ Fetched \(answers.count) prompt answers")
                 return answers
             }
             
-            print("⚠️ No prompt activities found in response")
+            print("⚠️ No prompt answers found in response")
             return []
             
         } catch {
