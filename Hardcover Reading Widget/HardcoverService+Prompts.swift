@@ -4,25 +4,30 @@ import Foundation
 struct PromptAnswer: Codable, Identifiable {
     let id: Int
     let createdAt: String
-    let prompt: Prompt
-    let books: [PromptBook]?
+    let data: PromptActivityData
+    let bookId: Int?
     
     enum CodingKeys: String, CodingKey {
         case id
         case createdAt = "created_at"
-        case prompt
-        case books = "prompt_answer_books"
+        case data
+        case bookId = "book_id"
     }
+}
+
+struct PromptActivityData: Codable {
+    let prompt: Prompt
 }
 
 struct Prompt: Codable {
     let id: Int
     let slug: String
-    let title: String?
+    let question: String?
     let description: String?
+    let answers: [PromptAnswerBook]?
 }
 
-struct PromptBook: Codable {
+struct PromptAnswerBook: Codable {
     let book: PromptBookDetails
 }
 
@@ -42,29 +47,17 @@ struct CachedImage: Codable {
     let url: String?
 }
 
-// MARK: - GraphQL Response
-struct GraphQLPromptsResponse: Codable {
-    let data: PromptsData?
-    let errors: [GraphQLPromptError]?
-}
-
-struct PromptsData: Codable {
-    let promptAnswers: [PromptAnswer]?
-    
-    enum CodingKeys: String, CodingKey {
-        case promptAnswers = "prompt_answers"
-    }
-}
-
-struct GraphQLPromptError: Codable {
-    let message: String
-}
-
 extension HardcoverService {
     /// Fetch answered prompts for the current user
     static func fetchAnsweredPrompts() async -> [PromptAnswer] {
         guard !HardcoverConfig.apiKey.isEmpty else {
             print("❌ No API key available")
+            return []
+        }
+        
+        // First get user ID
+        guard let profile = await fetchUserProfile() else {
+            print("❌ Could not fetch user profile")
             return []
         }
         
@@ -80,25 +73,11 @@ extension HardcoverService {
         
         let query = """
         query {
-          me {
-            prompt_answers(order_by: {created_at: desc}) {
-              id
-              created_at
-              prompt {
-                id
-                slug
-              }
-              prompt_answer_books {
-                book {
-                  id
-                  title
-                  image
-                  cached_image {
-                    url
-                  }
-                }
-              }
-            }
+          activities(where: {user_id: {_eq: \(profile.id)}, event: {_eq: "PromptActivity"}}, order_by: {created_at: desc}, limit: 50) {
+            id
+            created_at
+            book_id
+            data
           }
         }
         """
@@ -126,21 +105,18 @@ extension HardcoverService {
             // Parse the response
             let decoder = JSONDecoder()
             
-            // First try to decode as a direct response with prompt_answers
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let dataDict = json["data"] as? [String: Any],
-               let meArray = dataDict["me"] as? [[String: Any]],
-               let firstMe = meArray.first,
-               let promptAnswers = firstMe["prompt_answers"] as? [[String: Any]] {
+               let activities = dataDict["activities"] as? [[String: Any]] {
                 
                 // Convert back to data and decode
-                let promptsData = try JSONSerialization.data(withJSONObject: promptAnswers)
-                let answers = try decoder.decode([PromptAnswer].self, from: promptsData)
-                print("✅ Fetched \(answers.count) prompt answers")
+                let activitiesData = try JSONSerialization.data(withJSONObject: activities)
+                let answers = try decoder.decode([PromptAnswer].self, from: activitiesData)
+                print("✅ Fetched \(answers.count) prompt activities")
                 return answers
             }
             
-            print("⚠️ No prompt answers found in response")
+            print("⚠️ No prompt activities found in response")
             return []
             
         } catch {
