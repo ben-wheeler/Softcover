@@ -175,6 +175,30 @@ struct ProfileView: View {
                                     .background(Color(UIColor.secondarySystemGroupedBackground))
                                 
                                 NavigationLink {
+                                    PromptsView()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "questionmark.bubble.fill")
+                                            .foregroundColor(.pink)
+                                            .frame(width: 30)
+                                        Text(NSLocalizedString("Answered Prompts", comment: "Title for answered prompts view"))
+                                            .font(.body)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.vertical, 16)
+                                    .padding(.horizontal)
+                                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                                }
+                                
+                                Divider()
+                                    .padding(.leading, 46)
+                                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                                
+                                NavigationLink {
                                     FriendsView()
                                 } label: {
                                     HStack {
