@@ -81,6 +81,12 @@ struct ContentView: View {
                 await loadBooks()
                 loadUsernameFromDefaults()
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("BookListsNeedRefresh"))) { _ in
+                Task {
+                    await loadBooks()
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
+            }
             .sheet(item: $selectedBookForEdition) { book in
                 EditionPickerView(book: book) { success in
                     if success {

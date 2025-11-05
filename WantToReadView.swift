@@ -155,6 +155,9 @@ struct WantToReadView: View {
             .task { await loadTotalWantToReadCount() }
             .task { await syncNotificationState() }
             .refreshable { await reload() }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("BookListsNeedRefresh"))) { _ in
+                Task { await reload() }
+            }
             .alert("Action failed", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") { errorMessage = nil }
             } message: {
