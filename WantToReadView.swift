@@ -273,7 +273,9 @@ struct WantToReadView: View {
                 Image(systemName: "bookmark")
                     .font(.system(size: 44))
                     .foregroundColor(.secondary)
-                Text("No books in Want to Read")
+                Text(selectedFilter.rawValue == FilterType.all.rawValue
+                        ? "No books in Want to Read"
+                        : "No \(selectedFilter.rawValue) Want to Read books")
                     .font(.headline)
                 Text("Add books to your Want to Read list on Hardcover to see them here.")
                     .font(.caption)
@@ -288,7 +290,6 @@ struct WantToReadView: View {
     private var listView: some View {
         VStack(spacing: 0) {
             wantToReadPicker
-            
             List {
                         Section {
                             // Liten infotext överst
