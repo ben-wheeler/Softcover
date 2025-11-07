@@ -251,18 +251,21 @@ struct WantToReadView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
+    private var wantToReadPicker: some View {
+        Picker("Filter", selection: $selectedFilter) {
+            ForEach(FilterType.allCases, id: \.self) { filter in
+                Text(filter.rawValue).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+    
     private var emptyView: some View {
         VStack(spacing: 0) {
             if !items.isEmpty {
-                // Filter picker
-                Picker("Filter", selection: $selectedFilter) {
-                    ForEach(FilterType.allCases, id: \.self) { filter in
-                        Text(filter.rawValue).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
+                wantToReadPicker
             }
             
             // Empty state content
@@ -281,19 +284,10 @@ struct WantToReadView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
-
     
     private var listView: some View {
         VStack(spacing: 0) {
-            // Filter picker
-            Picker("Filter", selection: $selectedFilter) {
-                ForEach(FilterType.allCases, id: \.self) { filter in
-                    Text(filter.rawValue).tag(filter)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            wantToReadPicker
             
             List {
                         Section {
