@@ -243,7 +243,7 @@ struct SearchResultDetailSheet: View {
         let success = await HardcoverService.startReadingBook(bookId: bookId, editionId: selectedEditionId)
         
         await MainActor.run {
-            isWorkingReading = false }
+            isWorkingReading = false
             if success {
                 // Post notification to refresh all book lists
                 NotificationCenter.default.post(name: NSNotification.Name("BookListsNeedRefresh"), object: nil)
