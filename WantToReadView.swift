@@ -252,20 +252,36 @@ struct WantToReadView: View {
     }
     
     private var emptyView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "bookmark")
-                .font(.system(size: 44))
-                .foregroundColor(.secondary)
-            Text("No books in Want to Read")
-                .font(.headline)
-            Text("Add books to your Want to Read list on Hardcover to see them here.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+        VStack(spacing: 0) {
+            if !items.isEmpty {
+                // Filter picker
+                Picker("Filter", selection: $selectedFilter) {
+                    ForEach(FilterType.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
                 .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+            
+            // Empty state content
+            VStack(spacing: 12) {
+                Image(systemName: "bookmark")
+                    .font(.system(size: 44))
+                    .foregroundColor(.secondary)
+                Text("No books in Want to Read")
+                    .font(.headline)
+                Text("Add books to your Want to Read list on Hardcover to see them here.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
     
     private var listView: some View {
         VStack(spacing: 0) {
