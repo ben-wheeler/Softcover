@@ -374,6 +374,9 @@ struct BookCardView: View {
     @State private var showActionError = false
     @FocusState private var pageFieldFocused: Bool
     @State private var isManualEditing = false
+    // NEW: Separate hours and minutes for audiobooks
+    @State private var editedHours: Int = 0
+    @State private var editedMinutes: Int = 0
     
     // Rating flow
     private struct FinishID: Identifiable { let id: Int }
@@ -387,7 +390,13 @@ struct BookCardView: View {
         self.onProgressSaved = onProgressSaved
         self.onCelebrate = onCelebrate
         self.onFinished = onFinished
-        _editedPage = State(initialValue: book.isAudiobook ? book.currentMinute : book.currentPage)
+        let initialPage = book.isAudiobook ? book.currentMinute : book.currentPage
+        _editedPage = State(initialValue: initialPage)
+        // Initialize hours and minutes for audiobooks
+        if book.isAudiobook {
+            _editedHours = State(initialValue: initialPage / 60)
+            _editedMinutes = State(initialValue: initialPage % 60)
+        }
     }
     
     var body: some View {
@@ -576,25 +585,65 @@ struct BookCardView: View {
                                     (book.totalMinutes > 0 ? book.totalMinutes : max(editedPage, 0) + 100000) :
                                     (book.totalPages > 0 ? book.totalPages : max(editedPage, 0) + 10000)
                                 
-                                Stepper(value: $editedPage, in: 0...maxValue) {
-                                    if isManualEditing {
-                                        HStack(spacing: 6) {
-                                            TextField(book.isAudiobook ? "Minutes" : "Page", value: $editedPage, format: .number)
-                                                .keyboardType(.numberPad)
-                                                .textFieldStyle(.roundedBorder)
-                                                .frame(minWidth: 70, maxWidth: 100)
-                                                .focused($pageFieldFocused)
-                                                .onSubmit { isManualEditing = false }
-#if targetEnvironment(macCatalyst)
-                                            Button("Done") {
-                                                isManualEditing = false
-                                                pageFieldFocused = false
+                                if isManualEditing {
+                                    // Manual editing mode - show input fields without stepper
+                                    if book.isAudiobook {
+                                        // Hours and minutes input for audiobooks
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack(spacing: 4) {
+                                                TextField("0", value: $editedHours, format: .number)
+                                                    .keyboardType(.numberPad)
+                                                    .textFieldStyle(.roundedBorder)
+                                                    .frame(width: 50)
+                                                    .multilineTextAlignment(.center)
+                                                    .focused($pageFieldFocused)
+                                                    .onChange(of: editedHours) { oldValue, newValue in
+                                                        // Update editedPage when hours change
+                                                        editedPage = newValue * 60 + editedMinutes
+                                                    }
+                                                Text(":")
+                                                    .font(.title2)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.secondary)
+                                                TextField("00", value: $editedMinutes, format: .number)
+                                                    .keyboardType(.numberPad)
+                                                    .textFieldStyle(.roundedBorder)
+                                                    .frame(width: 50)
+                                                    .multilineTextAlignment(.center)
+                                                    .onChange(of: editedMinutes) { oldValue, newValue in
+                                                        // Validate minutes: if > 59, add to hours
+                                                        if newValue >= 60 {
+                                                            editedHours += newValue / 60
+                                                            editedMinutes = newValue % 60
+                                                        } else if newValue < 0 {
+                                                            editedMinutes = 0
+                                                        }
+                                                        // Update editedPage when minutes change
+                                                        editedPage = editedHours * 60 + newValue
+                                                    }
                                             }
-                                            .buttonStyle(.bordered)
-#endif
+                                            Text("(hours : minutes)")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
                                         }
                                     } else {
+                                        // Page input for regular books
+                                        TextField("Page", value: $editedPage, format: .number)
+                                            .keyboardType(.numberPad)
+                                            .textFieldStyle(.roundedBorder)
+                                            .frame(width: 80)
+                                            .multilineTextAlignment(.center)
+                                            .focused($pageFieldFocused)
+                                    }
+                                } else {
+                                    // Normal mode - show stepper
+                                    Stepper(value: $editedPage, in: 0...maxValue) {
                                         Button {
+                                            if book.isAudiobook {
+                                                // Split current minutes into hours and minutes
+                                                editedHours = editedPage / 60
+                                                editedMinutes = editedPage % 60
+                                            }
                                             isManualEditing = true
                                             pageFieldFocused = true
                                         } label: {
@@ -618,8 +667,16 @@ struct BookCardView: View {
                                         }
                                         .buttonStyle(.plain)
                                     }
+                                    .disabled(isUpdating)
+                                    .onChange(of: editedPage) { oldValue, newValue in
+                                        // Sync hours and minutes when stepper buttons are used
+                                        if book.isAudiobook {
+                                            editedHours = newValue / 60
+                                            editedMinutes = newValue % 60
+                                        }
+                                    }
                                 }
-                                .disabled(isUpdating)
+                                
                                 if isUpdating {
                                     ProgressView().scaleEffect(0.8)
                                 } else {
@@ -728,6 +785,13 @@ struct BookCardView: View {
         guard let userBookId = book.userBookId else { return }
         let currentValue = book.isAudiobook ? book.currentMinute : book.currentPage
         let increased = editedPage > currentValue
+        
+        // Exit manual editing mode
+        await MainActor.run {
+            isManualEditing = false
+            pageFieldFocused = false
+        }
+        
         isUpdating = true
         let success = await HardcoverService.updateProgress(userBookId: userBookId, editionId: book.editionId, page: editedPage, isAudiobook: book.isAudiobook)
         await MainActor.run {
