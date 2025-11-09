@@ -377,6 +377,10 @@ struct BookCardView: View {
     // NEW: Separate hours and minutes for audiobooks
     @State private var editedHours: Int = 0
     @State private var editedMinutes: Int = 0
+    // NEW: Percent-based progress
+    @State private var editedPercent: Int = 0
+    @State private var usePercentMode = false
+    @AppStorage("DefaultProgressInputMode", store: AppGroup.defaults) private var defaultProgressInputMode: String = "page"
     
     // Rating flow
     private struct FinishID: Identifiable { let id: Int }
@@ -396,6 +400,11 @@ struct BookCardView: View {
         if book.isAudiobook {
             _editedHours = State(initialValue: initialPage / 60)
             _editedMinutes = State(initialValue: initialPage % 60)
+        }
+        // Initialize percent
+        let total = book.isAudiobook ? book.totalMinutes : book.totalPages
+        if total > 0 {
+            _editedPercent = State(initialValue: Int((Double(initialPage) / Double(total)) * 100.0))
         }
     }
     
@@ -587,53 +596,117 @@ struct BookCardView: View {
                                 
                                 if isManualEditing {
                                     // Manual editing mode - show input fields without stepper
-                                    if book.isAudiobook {
-                                        // Hours and minutes input for audiobooks
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            HStack(spacing: 4) {
-                                                TextField("0", value: $editedHours, format: .number)
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        // Toggle between page/time and percent mode
+                                        Picker("Input mode", selection: $usePercentMode) {
+                                            Text(book.isAudiobook ? "Time" : "Page").tag(false)
+                                            Text("Percent").tag(true)
+                                        }
+                                        .pickerStyle(.segmented)
+                                        .frame(maxWidth: 200)
+                                        .onChange(of: usePercentMode) { oldValue, newValue in
+                                            // Keep manual editing active when switching modes
+                                            // Small delay to ensure TextField is rendered before focusing
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                                pageFieldFocused = true
+                                            }
+                                        }
+                                        .onTapGesture {
+                                            // Prevent closing when tapping picker
+                                        }
+                                        
+                                        if usePercentMode {
+                                            // Percent input mode
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                HStack(spacing: 4) {
+                                                    TextField("0", value: $editedPercent, format: .number)
+                                                        .keyboardType(.numberPad)
+                                                        .textFieldStyle(.roundedBorder)
+                                                        .frame(width: 60)
+                                                        .multilineTextAlignment(.center)
+                                                        .focused($pageFieldFocused)
+                                                        .onChange(of: editedPercent) { oldValue, newValue in
+                                                            // Clamp percent to 0-100
+                                                            if newValue > 100 {
+                                                                editedPercent = 100
+                                                            } else if newValue < 0 {
+                                                                editedPercent = 0
+                                                            }
+                                                            // Calculate page/minutes from percent
+                                                            let total = book.isAudiobook ? book.totalMinutes : book.totalPages
+                                                            if total > 0 {
+                                                                editedPage = Int(round(Double(total) * (Double(newValue) / 100.0)))
+                                                                if book.isAudiobook {
+                                                                    editedHours = editedPage / 60
+                                                                    editedMinutes = editedPage % 60
+                                                                }
+                                                            }
+                                                        }
+                                                    Text("%")
+                                                        .font(.title2)
+                                                        .fontWeight(.semibold)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                                if book.isAudiobook && book.totalMinutes > 0 {
+                                                    Text("≈ \(editedHours)h \(editedMinutes)m of \(book.totalMinutes / 60)h \(book.totalMinutes % 60)m")
+                                                        .font(.caption2)
+                                                        .foregroundColor(.secondary)
+                                                } else if !book.isAudiobook && book.totalPages > 0 {
+                                                    Text("≈ page \(editedPage) of \(book.totalPages)")
+                                                        .font(.caption2)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            }
+                                        } else if book.isAudiobook {
+                                            // Hours and minutes input for audiobooks
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                HStack(spacing: 4) {
+                                                    TextField("0", value: $editedHours, format: .number)
+                                                        .keyboardType(.numberPad)
+                                                        .textFieldStyle(.roundedBorder)
+                                                        .frame(width: 50)
+                                                        .multilineTextAlignment(.center)
+                                                        .focused($pageFieldFocused)
+                                                        .onChange(of: editedHours) { oldValue, newValue in
+                                                            // Update editedPage when hours change
+                                                            editedPage = newValue * 60 + editedMinutes
+                                                        }
+                                                    Text(":")
+                                                        .font(.title2)
+                                                        .fontWeight(.semibold)
+                                                        .foregroundColor(.secondary)
+                                                    TextField("00", value: $editedMinutes, format: .number)
+                                                        .keyboardType(.numberPad)
+                                                        .textFieldStyle(.roundedBorder)
+                                                        .frame(width: 50)
+                                                        .multilineTextAlignment(.center)
+                                                        .onChange(of: editedMinutes) { oldValue, newValue in
+                                                            // Validate minutes: if > 59, add to hours
+                                                            if newValue >= 60 {
+                                                                editedHours += newValue / 60
+                                                                editedMinutes = newValue % 60
+                                                            } else if newValue < 0 {
+                                                                editedMinutes = 0
+                                                            }
+                                                            // Update editedPage when minutes change
+                                                            editedPage = editedHours * 60 + newValue
+                                                        }
+                                                }
+                                                Text("(hours : minutes)")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        } else {
+                                            // Page input for regular books
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                TextField("Page", value: $editedPage, format: .number)
                                                     .keyboardType(.numberPad)
                                                     .textFieldStyle(.roundedBorder)
-                                                    .frame(width: 50)
+                                                    .frame(width: 80)
                                                     .multilineTextAlignment(.center)
                                                     .focused($pageFieldFocused)
-                                                    .onChange(of: editedHours) { oldValue, newValue in
-                                                        // Update editedPage when hours change
-                                                        editedPage = newValue * 60 + editedMinutes
-                                                    }
-                                                Text(":")
-                                                    .font(.title2)
-                                                    .fontWeight(.semibold)
-                                                    .foregroundColor(.secondary)
-                                                TextField("00", value: $editedMinutes, format: .number)
-                                                    .keyboardType(.numberPad)
-                                                    .textFieldStyle(.roundedBorder)
-                                                    .frame(width: 50)
-                                                    .multilineTextAlignment(.center)
-                                                    .onChange(of: editedMinutes) { oldValue, newValue in
-                                                        // Validate minutes: if > 59, add to hours
-                                                        if newValue >= 60 {
-                                                            editedHours += newValue / 60
-                                                            editedMinutes = newValue % 60
-                                                        } else if newValue < 0 {
-                                                            editedMinutes = 0
-                                                        }
-                                                        // Update editedPage when minutes change
-                                                        editedPage = editedHours * 60 + newValue
-                                                    }
                                             }
-                                            Text("(hours : minutes)")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
                                         }
-                                    } else {
-                                        // Page input for regular books
-                                        TextField("Page", value: $editedPage, format: .number)
-                                            .keyboardType(.numberPad)
-                                            .textFieldStyle(.roundedBorder)
-                                            .frame(width: 80)
-                                            .multilineTextAlignment(.center)
-                                            .focused($pageFieldFocused)
                                     }
                                 } else {
                                     // Normal mode - show stepper
@@ -644,10 +717,30 @@ struct BookCardView: View {
                                                 editedHours = editedPage / 60
                                                 editedMinutes = editedPage % 60
                                             }
+                                            // Calculate percent
+                                            let total = book.isAudiobook ? book.totalMinutes : book.totalPages
+                                            if total > 0 {
+                                                editedPercent = Int((Double(editedPage) / Double(total)) * 100.0)
+                                            }
+                                            // Set default mode from settings
+                                            usePercentMode = (defaultProgressInputMode == "percent")
                                             isManualEditing = true
                                             pageFieldFocused = true
                                         } label: {
-                                            if book.isAudiobook {
+                                            // Show percent if that's the default mode, otherwise show page/time
+                                            if defaultProgressInputMode == "percent" {
+                                                let total = book.isAudiobook ? book.totalMinutes : book.totalPages
+                                                if total > 0 {
+                                                    let percent = Int((Double(editedPage) / Double(total)) * 100.0)
+                                                    Text("\(percent)%")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                } else {
+                                                    Text("0%")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            } else if book.isAudiobook {
                                                 let hours = editedPage / 60
                                                 let mins = editedPage % 60
                                                 if hours > 0 {
@@ -673,6 +766,11 @@ struct BookCardView: View {
                                         if book.isAudiobook {
                                             editedHours = newValue / 60
                                             editedMinutes = newValue % 60
+                                        }
+                                        // Keep percent in sync when stepper is used
+                                        let total = book.isAudiobook ? book.totalMinutes : book.totalPages
+                                        if total > 0 {
+                                            editedPercent = Int((Double(newValue) / Double(total)) * 100.0)
                                         }
                                     }
                                 }
@@ -752,9 +850,17 @@ struct BookCardView: View {
                 editedPage = newTotal
             }
         }
-        // Exit manual mode when keyboard hides (e.g., global Done tapped)
+        // Exit manual mode when keyboard hides ONLY if not using picker mode
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            if isManualEditing { isManualEditing = false }
+            // Don't exit if we're in the middle of switching input modes
+            if isManualEditing && !usePercentMode {
+                // Only exit if user explicitly dismissed keyboard, not when switching modes
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    if !pageFieldFocused && isManualEditing {
+                        isManualEditing = false
+                    }
+                }
+            }
         }
         // PRESENTATION: item-baserad sheet (betyg tomt tills man ändrar)
         .sheet(item: $pendingFinishUserBookId) { item in

@@ -13,6 +13,8 @@ struct ApiKeySettingsView: View {
     @AppStorage("AppearancePreference", store: AppGroup.defaults) private var appearancePref: String = "system"
     // NEW: Skip edition picker preference
     @AppStorage("SkipEditionPickerOnAdd", store: AppGroup.defaults) private var skipEditionPickerOnAdd: Bool = false
+    // NEW: Default progress input mode preference
+    @AppStorage("DefaultProgressInputMode", store: AppGroup.defaults) private var defaultProgressInputMode: String = "page"
     
     let onSaved: ((String) -> Void)?
     
@@ -101,6 +103,17 @@ struct ApiKeySettingsView: View {
                 Section(header: Text("Add Book")) {
                     Toggle("Skip \"Choose Edition\" when adding", isOn: $skipEditionPickerOnAdd)
                     Text("When enabled, the default edition is automatically used when you add a book to \"Want to Read\" or \"Currently Reading\".")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                // NEW: Progress Update preference
+                Section(header: Text("Progress Update")) {
+                    Picker("Default input mode", selection: $defaultProgressInputMode) {
+                        Text("Page/Time").tag("page")
+                        Text("Percent").tag("percent")
+                    }
+                    Text("Choose whether to update progress using page numbers/time or percentage by default. You can always switch between modes when updating.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
