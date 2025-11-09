@@ -23,6 +23,26 @@ struct ApiKeySettingsView: View {
     var body: some View {
         NavigationView {
             Form {
+                // Welcome message for first-time users
+                if AppGroup.defaults.string(forKey: "HardcoverAPIKey")?.isEmpty ?? true {
+                    Section {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: "hand.wave.fill")
+                                    .font(.title)
+                                    .foregroundColor(.blue)
+                                Text(NSLocalizedString("Welcome to Softcover!", comment: "Onboarding welcome title"))
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                            }
+                            
+                            Text(NSLocalizedString("To get started, you'll need your Hardcover API key. This allows the app to sync your reading progress.", comment: "Onboarding welcome description"))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+                
                 Section(header: Text("API Key", comment: "Settings section title")) {
                     TextField("Paste your API key", text: $apiKey, axis: .vertical)
                         .textInputAutocapitalization(.never)

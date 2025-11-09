@@ -24,6 +24,8 @@ struct ContentView: View {
     @State private var selectedBookForDetails: BookProgress?
     // Tab selection
     @State private var selectedTab = 0
+    // NEW: Onboarding
+    @State private var hasCheckedOnboarding = false
     
     var body: some View {
         ZStack {
@@ -80,6 +82,7 @@ struct ContentView: View {
             .task {
                 await loadBooks()
                 loadUsernameFromDefaults()
+                checkOnboarding()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("BookListsNeedRefresh"))) { _ in
                 Task {
@@ -309,6 +312,21 @@ struct ContentView: View {
     
     private func loadUsernameFromDefaults() {
         username = AppGroup.defaults.string(forKey: "HardcoverUsername") ?? ""
+    }
+    
+    private func checkOnboarding() {
+        // Only check once per app launch
+        guard !hasCheckedOnboarding else { return }
+        hasCheckedOnboarding = true
+        
+        // If no API key is set, show settings immediately
+        let apiKey = HardcoverConfig.apiKey
+        if apiKey.isEmpty {
+            // Small delay to let the UI settle
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                showingApiSettings = true
+            }
+        }
     }
     
     private func loadBooks() async {

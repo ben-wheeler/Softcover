@@ -215,19 +215,24 @@ struct SearchResultDetailSheet: View {
         await MainActor.run { isWorking = true }
         
         guard let bookId = book.bookId else {
+            print("❌ addToWantToRead: No bookId available")
             await MainActor.run { isWorking = false }
             return
         }
         
+        print("📚 Adding book \(bookId) to Want to Read (edition: \(selectedEditionId?.description ?? "none"))")
         let success = await HardcoverService.addBookToWantToRead(bookId: bookId, editionId: selectedEditionId)
         
         await MainActor.run {
             isWorking = false
             if success {
+                print("✅ Successfully added book \(bookId) to Want to Read")
                 // Post notification to refresh all book lists
                 NotificationCenter.default.post(name: NSNotification.Name("BookListsNeedRefresh"), object: nil)
                 onAddComplete(true)
                 dismiss()
+            } else {
+                print("❌ Failed to add book \(bookId) to Want to Read")
             }
         }
     }
@@ -236,19 +241,24 @@ struct SearchResultDetailSheet: View {
         await MainActor.run { isWorkingReading = true }
         
         guard let bookId = book.bookId else {
+            print("❌ startReading: No bookId available")
             await MainActor.run { isWorkingReading = false }
             return
         }
         
+        print("📚 Starting to read book \(bookId) (edition: \(selectedEditionId?.description ?? "none"))")
         let success = await HardcoverService.startReadingBook(bookId: bookId, editionId: selectedEditionId)
         
         await MainActor.run {
-            isWorkingReading = false }
+            isWorkingReading = false
             if success {
+                print("✅ Successfully started reading book \(bookId)")
                 // Post notification to refresh all book lists
                 NotificationCenter.default.post(name: NSNotification.Name("BookListsNeedRefresh"), object: nil)
                 onAddComplete(true)
                 dismiss()
+            } else {
+                print("❌ Failed to start reading book \(bookId)")
             }
         }
     }
@@ -257,10 +267,12 @@ struct SearchResultDetailSheet: View {
         await MainActor.run { isWorkingFinished = true }
         
         guard let bookId = book.bookId else {
+            print("❌ markAsFinished: No bookId available")
             await MainActor.run { isWorkingFinished = false }
             return
         }
         
+        print("📚 Marking book \(bookId) as finished (edition: \(selectedEditionId?.description ?? "none"))")
         let success = await HardcoverService.finishBookByBookId(
             bookId: bookId,
             editionId: selectedEditionId,
@@ -271,10 +283,13 @@ struct SearchResultDetailSheet: View {
         await MainActor.run {
             isWorkingFinished = false
             if success {
+                print("✅ Successfully marked book \(bookId) as finished")
                 // Post notification to refresh all book lists
                 NotificationCenter.default.post(name: NSNotification.Name("BookListsNeedRefresh"), object: nil)
                 onAddComplete(true)
                 dismiss()
+            } else {
+                print("❌ Failed to mark book \(bookId) as finished")
             }
         }
     }

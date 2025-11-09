@@ -5,17 +5,31 @@ extension HardcoverService {
     // If a user_book for this book already exists for the current user, update it.
     // Otherwise, create a new user_book entry.
     static func startReadingBook(bookId: Int, editionId: Int?) async -> Bool {
-        guard !HardcoverConfig.apiKey.isEmpty else { return false }
-        guard let url = URL(string: "https://api.hardcover.app/v1/graphql") else { return false }
+        guard !HardcoverConfig.apiKey.isEmpty else {
+            print("❌ startReadingBook: API key is empty")
+            return false
+        }
+        guard let url = URL(string: "https://api.hardcover.app/v1/graphql") else {
+            print("❌ startReadingBook: Invalid URL")
+            return false
+        }
         
         // 1) Resolve current user id
-        guard let userId = await fetchCurrentUserId(apiURL: url) else { return false }
+        print("🔍 Fetching current user ID...")
+        guard let userId = await fetchCurrentUserId(apiURL: url) else {
+            print("❌ startReadingBook: Could not fetch current user ID")
+            return false
+        }
+        print("✅ Got user ID: \(userId)")
         
         // 2) Try to find an existing user_book for this user and book
+        print("🔍 Checking for existing user_book...")
         if let existingId = await fetchExistingUserBookId(apiURL: url, userId: userId, bookId: bookId) {
+            print("📖 Found existing user_book with ID: \(existingId), updating to reading status...")
             // Update to status 2 (reading) and optionally set edition
             return await updateUserBookToReading(apiURL: url, userBookId: existingId, editionId: editionId)
         } else {
+            print("📖 No existing user_book found, creating new entry...")
             // 3) Insert a new user_book with status 2 (reading)
             return await insertUserBookAsReading(apiURL: url, userId: userId, bookId: bookId, editionId: editionId)
         }
@@ -127,14 +141,25 @@ extension HardcoverService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(HardcoverConfig.authorizationHeaderValue, forHTTPHeaderField: "Authorization")
+        
+        // Get current date in YYYY-MM-DD format
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayString = dateFormatter.string(from: Date())
+        
+        // Get privacy setting
+        let privacySettingId = await fetchAccountPrivacySettingId() ?? 1
+        
         var object: [String: Any] = [
-            "user_id": userId,
             "book_id": bookId,
-            "status_id": 2
+            "status_id": 2,
+            "privacy_setting_id": privacySettingId,
+            "user_date": todayString
         ]
         if let eid = editionId { object["edition_id"] = eid }
+        
         let mutation = """
-        mutation InsertUserBook($object: UserBookInsertInput!) {
+        mutation InsertUserBook($object: UserBookCreateInput!) {
           insert_user_book(object: $object) {
             error
             user_book { id }
@@ -148,15 +173,34 @@ extension HardcoverService {
         do {
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
             let (data, _) = try await URLSession.shared.data(for: req)
+            
+            // Log the response
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📥 insertUserBookAsReading response: \(responseString)")
+            }
+            
             if let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let errors = root["errors"] as? [[String: Any]], !errors.isEmpty { return false }
+                if let errors = root["errors"] as? [[String: Any]], !errors.isEmpty {
+                    print("❌ insertUserBookAsReading GraphQL errors: \(errors)")
+                    return false
+                }
                 if let dataDict = root["data"] as? [String: Any],
                    let insert = dataDict["insert_user_book"] as? [String: Any] {
-                    if let err = insert["error"] as? String, !err.isEmpty { return false }
-                    return insert["user_book"] != nil
+                    if let err = insert["error"] as? String, !err.isEmpty {
+                        print("❌ insertUserBookAsReading error: \(err)")
+                        return false
+                    }
+                    if insert["user_book"] != nil {
+                        print("✅ Successfully inserted user_book for reading")
+                        return true
+                    }
                 }
             }
-        } catch { return false }
+        } catch {
+            print("❌ insertUserBookAsReading exception: \(error)")
+            return false
+        }
+        print("❌ insertUserBookAsReading: Unknown failure")
         return false
     }
 }

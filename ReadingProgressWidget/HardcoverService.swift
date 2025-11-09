@@ -1395,7 +1395,7 @@ class HardcoverService {
       }
   }
   
-  private static func fetchAccountPrivacySettingId() async -> Int? {
+  static func fetchAccountPrivacySettingId() async -> Int? {
       guard let url = URL(string: "https://api.hardcover.app/v1/graphql") else { return nil }
       var request = URLRequest(url: url)
       request.httpMethod = "POST"
@@ -2647,11 +2647,17 @@ extension HardcoverService {
         request.setValue(HardcoverConfig.authorizationHeaderValue, forHTTPHeaderField: "Authorization")
 
         let privacySetting = await fetchAccountPrivacySettingId() ?? 1
+        
+        // Get current date in YYYY-MM-DD format
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayString = dateFormatter.string(from: Date())
 
         var object: [String: Any] = [
             "book_id":  bookId,
             "status_id": 1,
-            "privacy_setting_id": privacySetting
+            "privacy_setting_id": privacySetting,
+            "user_date": todayString
         ]
         if let eid = editionId { object["edition_id"] = eid }
 
