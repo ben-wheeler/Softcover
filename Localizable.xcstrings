@@ -4251,6 +4251,17 @@
         }
       }
     },
+    "To get started, you'll need your Hardcover API key. This allows the app to sync your reading progress." : {
+      "comment" : "Onboarding welcome description",
+      "localizations" : {
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "För att komma igång behöver du din Hardcover API-nyckel. Detta gör det möjligt för appen att synkronisera dina läsframsteg."
+          }
+        }
+      }
+    },
     "View Developer Profile" : {
       "comment" : "Link to developer profile",
       "localizations" : {
@@ -4429,6 +4440,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dina inställningar har sparats. Widgetar uppdateras inom kort."
+          }
+        }
+      }
+    },
+    "Welcome to Softcover!" : {
+      "comment" : "Onboarding welcome title",
+      "localizations" : {
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Välkommen till Softcover!"
           }
         }
       }
